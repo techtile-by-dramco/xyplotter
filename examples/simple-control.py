@@ -63,7 +63,7 @@ class ACRO:
         print("Machine is homed")
 
     def move_ACRO(self, x, y, wait_idle=True):
-        command = f"G0 X{x} Y{y} F20\n"  # Command to move to specific location
+        command = f"G0 X{x} Y{y} F50\n"  # Command to move to specific location
         self.ser.write(command.encode())  # Send command to move to a specific position
         if wait_idle:
             self.wait_till_idle()  # Wait until controller reports idle state
