@@ -1,5 +1,6 @@
 import argparse
 import math
+import sys
 import numpy as np
 import time
 import zmq
@@ -10,6 +11,15 @@ context = zmq.Context()
 iq_socket = context.socket(zmq.PUB)
 
 iq_socket.bind(f"tcp://*:{50001}")
+
+# Simple ANSI coloring for logs
+USE_COLOR = sys.stdout.isatty()
+
+
+def _c(text: str, code: str) -> str:
+    if not USE_COLOR:
+        return text
+    return f"\033[{code}m{text}\033[0m"
 
 
 class ACRO:
@@ -36,7 +46,7 @@ class ACRO:
             self.ser.flushInput()
             self.ser.write(b"?\n")
             response = self.ser.readline().decode().strip()
-            print(response)
+            # print(response)
 
             if "Idle" in response:
                 break
@@ -50,7 +60,7 @@ class ACRO:
 
         # Read and decode the response
         response = self.ser.readline().decode().strip()
-        print("Controller response:", response)
+        # print("Controller response:", response)
 
         # Send homing command
         command = f"$H\n"  # Command to start homing
@@ -211,10 +221,11 @@ def plot_sweeps(
         draw_envelope(ax)
         if len(pts) > 1:
             xs, ys = zip(*pts)
-            ax.plot(xs, ys, linewidth=1.0, color="tab:blue", alpha=0.6)
-            ax.scatter(xs, ys, c="tab:blue", s=8, alpha=0.7, zorder=3)
-            ax.scatter(xs[0], ys[0], c="red", s=16, zorder=4, label="start")
-            ax.scatter(xs[-1], ys[-1], c="black", s=14, zorder=4, label="end")
+            color = plt.cm.plasma((sweep_number - sweeps[0][0]) / max(len(sweeps), 1))
+            ax.plot(xs, ys, linewidth=1.2, color=color, alpha=0.8)
+            ax.scatter(xs, ys, c=[color], s=10, alpha=0.8, zorder=3)
+            ax.scatter(xs[0], ys[0], c="lime", edgecolor="black", s=36, zorder=4, label="start")
+            ax.scatter(xs[-1], ys[-1], c="orange", edgecolor="black", s=32, zorder=4, label="end")
         ax.legend(loc="upper right", fontsize="x-small", framealpha=0.7)
 
     combined_ax_index = len(sweeps)
@@ -231,14 +242,15 @@ def plot_sweeps(
                 continue
             xs, ys = zip(*pts)
             color = plt.cm.plasma(idx / max(len(sweeps) - 1, 1))
-            ax.plot(xs, ys, linewidth=1.0, color=color, alpha=0.8, label=f"Sweep {sweep_number}")
-            ax.scatter(xs, ys, c=[color], s=6, alpha=0.6)
+            ax.plot(xs, ys, linewidth=1.1, color=color, alpha=0.85, label=f"Sweep {sweep_number}")
+            ax.scatter(xs, ys, c=[color], s=10, alpha=0.75, edgecolor="none")
         if len(sweeps) > 0 and len(sweeps[0][1]) > 0:
             ax.scatter(
                 sweeps[0][1][0][0],
                 sweeps[0][1][0][1],
-                c="red",
-                s=18,
+                c="lime",
+                edgecolor="black",
+                s=28,
                 zorder=3,
                 label="start (sweep 1)",
             )
@@ -268,6 +280,20 @@ if __name__ == "__main__":
         raise ValueError("x-max must be greater than x-min and y-max greater than y-min.")
     if args.start_sweep < 1:
         raise ValueError("start-sweep must be >= 1.")
+
+    print(_c("Run config:", "96"))
+    for key, val in [
+        ("x_min", args.x_min),
+        ("x_max", args.x_max),
+        ("y_min", args.y_min),
+        ("y_max", args.y_max),
+        ("port", args.port),
+        ("speed", f"{args.speed} mm/min"),
+        ("plot", args.plot),
+        ("sweeps", args.sweeps),
+        ("start_sweep", args.start_sweep),
+    ]:
+        print(f"  {_c(key, '93')}: {val}")
 
     if args.plot:
         sweeps = generate_sweep_points(
@@ -324,6 +350,16 @@ if __name__ == "__main__":
         if len(x_lines) == 0 or len(y_lines) == 0:
             x_lines = np.arange(args.x_min, args.x_max, spacing)
             y_lines = np.arange(args.y_min, args.y_max, spacing)
+
+        mode = "column" if sweep % 2 == 0 else "row"
+        print(
+            f"{_c('[sweep]', '95')} {sweep} "
+            f"{_c('mode', '94')}={mode} "
+            f"{_c('x', '92')}[{args.x_min + x_offset:.1f}->{args.x_max:.1f}] "
+            f"{_c('y', '92')}[{args.y_min + y_offset:.1f}->{args.y_max:.1f}] "
+            f"{_c('spacing', '93')}={spacing:.2f} "
+            f"{_c('speed', '96')}={args.speed} mm/min"
+        )
 
         ACRO.move_ACRO(center_x, center_y, wait_idle=True, speed=args.speed)
 
