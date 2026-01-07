@@ -63,8 +63,8 @@ class ACRO:
 
         print("Machine is homed")
 
-    def move_ACRO(self, x, y, wait_idle=True):
-        command = f"G0 X{x} Y{y} F50\n"  # Command to move to specific location
+    def move_ACRO(self, x, y, wait_idle=True, speed=50):
+        command = f"G0 X{x:.3f} Y{y:.3f} F{int(speed)}\n"  # Command to move to specific location (F = mm/min)
         self.ser.write(command.encode())  # Send command to move to a specific position
         if wait_idle:
             self.wait_till_idle()  # Wait until controller reports idle state
@@ -119,6 +119,7 @@ if __name__ == "__main__":
     parser.add_argument("--y-min", type=float, default=10.0, help="Minimum Y coordinate.")
     parser.add_argument("--y-max", type=float, default=1240.0, help="Maximum Y coordinate.")
     parser.add_argument("--port", type=str, default="/dev/ttyUSB0", help="Serial port for ACRO.")
+    parser.add_argument("--speed", type=int, default=50, help="Motion speed (mm/min, sets G-code F).")
     args = parser.parse_args()
 
     if args.x_max <= args.x_min or args.y_max <= args.y_min:
@@ -139,7 +140,7 @@ if __name__ == "__main__":
     center_x = (args.x_min + args.x_max) / 2
     center_y = (args.y_min + args.y_max) / 2
 
-    ACRO.move_ACRO(center_x, center_y, wait_idle=True)
+    ACRO.move_ACRO(center_x, center_y, wait_idle=True, speed=args.speed)
     # wait_till_go_from_server()
     # time.sleep(80) # be sure that calibration is done
     wait_till_pressed()
@@ -175,9 +176,9 @@ if __name__ == "__main__":
             xx, yy = yy, xx
 
         xx, yy = xx.ravel(), yy.ravel()
-        ACRO.move_ACRO(650, 650, wait_idle=True)
+        ACRO.move_ACRO(center_x, center_y, wait_idle=True, speed=args.speed)
         for x, y in zip(xx, yy):
-            ACRO.move_ACRO(x, y, wait_idle=True)
+            ACRO.move_ACRO(x, y, wait_idle=True, speed=args.speed)
             time.sleep(0.1)
     # Return to origin
     ACRO.move_ACRO_to_origin()
