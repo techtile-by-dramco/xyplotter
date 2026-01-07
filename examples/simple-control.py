@@ -115,26 +115,37 @@ def wait_till_go_from_server():
     sync_socket.close()
 
 
+def compute_spacing_for_sweep(start_spacing: float, min_spacing: float, decay: float, target_sweep: int) -> float:
+    """Compute the spacing that would be in effect at a given sweep number."""
+    spacing = start_spacing
+    for s in range(1, target_sweep):
+        if s > 1 and s % 2 == 1:
+            spacing = max(min_spacing, spacing * decay)
+    return spacing
+
+
 def generate_sweep_points(
     sweeps: int,
     x_min: float,
     x_max: float,
     y_min: float,
     y_max: float,
+    start_sweep: int = 1,
     start_spacing: float = 120.0,
     decay: float = 0.75,
     min_spacing: float = 20.0,
-) -> list[list[tuple[float, float]]]:
+) -> list[tuple[int, list[tuple[float, float]]]]:
     """Replicate the sweep path without driving hardware."""
-    all_sweeps: list[list[tuple[float, float]]] = []
-    spacing = start_spacing
+    all_sweeps: list[tuple[int, list[tuple[float, float]]]] = []
+    spacing = compute_spacing_for_sweep(start_spacing, min_spacing, decay, start_sweep)
     center = ((x_min + x_max) / 2, (y_min + y_max) / 2)
-    for sweep in range(1, sweeps + 1):
-        if sweep > 1 and sweep % 2 == 1:
+    sweep_number = start_sweep
+    for _ in range(sweeps):
+        if sweep_number > 1 and sweep_number % 2 == 1 and sweep_number != start_sweep:
             spacing = max(min_spacing, spacing * decay)
 
-        x_offset = (spacing / 2) if sweep % 2 == 0 else 0
-        y_offset = (spacing / 2) if sweep % 3 == 0 else 0
+        x_offset = (spacing / 2) if sweep_number % 2 == 0 else 0
+        y_offset = (spacing / 2) if sweep_number % 3 == 0 else 0
 
         x_lines = np.arange(x_min + x_offset, x_max, spacing)
         y_lines = np.arange(y_min + y_offset, y_max, spacing)
@@ -144,7 +155,7 @@ def generate_sweep_points(
             y_lines = np.arange(y_min, y_max, spacing)
 
         pts: list[tuple[float, float]] = [center]
-        if sweep % 2 == 0:
+        if sweep_number % 2 == 0:
             for idx, x_val in enumerate(x_lines):
                 if idx % 2 == 0:
                     pts.append((x_val, y_min))
@@ -161,12 +172,13 @@ def generate_sweep_points(
                     pts.append((x_max, y_val))
                     pts.append((x_min, y_val))
 
-        all_sweeps.append(pts)
+        all_sweeps.append((sweep_number, pts))
+        sweep_number += 1
     return all_sweeps
 
 
 def plot_sweeps(
-    sweeps: list[list[tuple[float, float]]],
+    sweeps: list[tuple[int, list[tuple[float, float]]]],
     x_min: float,
     x_max: float,
     y_min: float,
@@ -190,8 +202,9 @@ def plot_sweeps(
             linewidth=1,
         )
 
-    for idx, (ax, pts) in enumerate(zip(axes, sweeps), start=1):
-        ax.set_title(f"Sweep {idx}")
+    for idx, (ax, sweep_entry) in enumerate(zip(axes, sweeps), start=1):
+        sweep_number, pts = sweep_entry
+        ax.set_title(f"Sweep {sweep_number}")
         ax.set_aspect("equal", adjustable="box")
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(y_min, y_max)
@@ -212,17 +225,18 @@ def plot_sweeps(
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(y_min, y_max)
         draw_envelope(ax)
-        for idx, pts in enumerate(sweeps):
+        for idx, sweep_entry in enumerate(sweeps):
+            sweep_number, pts = sweep_entry
             if len(pts) < 2:
                 continue
             xs, ys = zip(*pts)
             color = plt.cm.plasma(idx / max(len(sweeps) - 1, 1))
-            ax.plot(xs, ys, linewidth=1.0, color=color, alpha=0.8, label=f"Sweep {idx+1}")
+            ax.plot(xs, ys, linewidth=1.0, color=color, alpha=0.8, label=f"Sweep {sweep_number}")
             ax.scatter(xs, ys, c=[color], s=6, alpha=0.6)
-        if len(sweeps) > 0 and len(sweeps[0]) > 0:
+        if len(sweeps) > 0 and len(sweeps[0][1]) > 0:
             ax.scatter(
-                sweeps[0][0][0],
-                sweeps[0][0][1],
+                sweeps[0][1][0][0],
+                sweeps[0][1][0][1],
                 c="red",
                 s=18,
                 zorder=3,
@@ -247,10 +261,13 @@ if __name__ == "__main__":
     parser.add_argument("--speed", type=int, default=50, help="Motion speed (mm/min, sets G-code F).")
     parser.add_argument("--plot", action="store_true", help="Plot the path instead of driving hardware.")
     parser.add_argument("--sweeps", type=int, default=10, help="Number of sweeps to plot (if --plot).")
+    parser.add_argument("--start-sweep", type=int, default=1, help="Sweep number to start from (skip earlier sweeps).")
     args = parser.parse_args()
 
     if args.x_max <= args.x_min or args.y_max <= args.y_min:
         raise ValueError("x-max must be greater than x-min and y-max greater than y-min.")
+    if args.start_sweep < 1:
+        raise ValueError("start-sweep must be >= 1.")
 
     if args.plot:
         sweeps = generate_sweep_points(
@@ -259,6 +276,7 @@ if __name__ == "__main__":
             x_max=args.x_max,
             y_min=args.y_min,
             y_max=args.y_max,
+            start_sweep=args.start_sweep,
         )
         plot_sweeps(sweeps, x_min=args.x_min, x_max=args.x_max, y_min=args.y_min, y_max=args.y_max)
         raise SystemExit(0)
@@ -284,15 +302,15 @@ if __name__ == "__main__":
     wait_till_pressed()
 
     # Simple sweep that increases density every other pass and alternates row/column snakes.
-    spacing = 120.0  # start coarse
+    spacing = compute_spacing_for_sweep(120.0, 20.0, 0.75, args.start_sweep)
     min_spacing = 20.0
-    decay = 0.75  # smaller every 2nd sweep
-    sweep = 0
+    decay = 0.75
+    sweep = args.start_sweep
 
     while True:
         sweep += 1
         # Adjust spacing after every 2nd sweep
-        if sweep > 1 and sweep % 2 == 1:
+        if sweep > 1 and sweep % 2 == 1 and sweep != args.start_sweep:
             spacing = max(min_spacing, spacing * decay)
 
         # Offset to avoid retracing the same paths
