@@ -274,6 +274,7 @@ if __name__ == "__main__":
     parser.add_argument("--plot", action="store_true", help="Plot the path instead of driving hardware.")
     parser.add_argument("--sweeps", type=int, default=10, help="Number of sweeps to plot (if --plot).")
     parser.add_argument("--start-sweep", type=int, default=1, help="Sweep number to start from (skip earlier sweeps).")
+    parser.add_argument("--skip-waiting", action="store_true", help="Do not move to center before sweeping.")
     args = parser.parse_args()
 
     if args.x_max <= args.x_min or args.y_max <= args.y_min:
@@ -292,6 +293,7 @@ if __name__ == "__main__":
         ("plot", args.plot),
         ("sweeps", args.sweeps),
         ("start_sweep", args.start_sweep),
+        ("skip_waiting", args.skip_waiting),
     ]:
         print(f"  {_c(key, '93')}: {val}")
 
@@ -322,10 +324,11 @@ if __name__ == "__main__":
     center_x = (args.x_min + args.x_max) / 2
     center_y = (args.y_min + args.y_max) / 2
 
-    ACRO.move_ACRO(center_x, center_y, wait_idle=True, speed=args.speed)
-    # wait_till_go_from_server()
-    # time.sleep(80) # be sure that calibration is done
-    wait_till_pressed()
+    if not args.skip_waiting:
+        ACRO.move_ACRO(center_x, center_y, wait_idle=True, speed=args.speed)
+        # wait_till_go_from_server()
+        # time.sleep(80) # be sure that calibration is done
+        wait_till_pressed()
 
     # Simple sweep that increases density every other pass and alternates row/column snakes.
     spacing = compute_spacing_for_sweep(120.0, 20.0, 0.75, args.start_sweep)
@@ -361,7 +364,8 @@ if __name__ == "__main__":
             f"{_c('speed', '96')}={args.speed} mm/min"
         )
 
-        ACRO.move_ACRO(center_x, center_y, wait_idle=True, speed=args.speed)
+        if not args.skip_waiting:
+            ACRO.move_ACRO(center_x, center_y, wait_idle=True, speed=args.speed)
 
         if sweep % 2 == 0:
             # Column sweep: move along Y for each X
