@@ -1,3 +1,4 @@
+import argparse
 import numpy as np
 import serial
 import time
@@ -110,8 +111,20 @@ def wait_till_go_from_server():
     sync_socket.close()
 
 
+
 if __name__ == "__main__":
-    ACRO = ACRO(COMport="/dev/ttyUSB0")
+    parser = argparse.ArgumentParser(description="Simple XY sweep with increasing density.")
+    parser.add_argument("--x-min", type=float, default=10.0, help="Minimum X coordinate.")
+    parser.add_argument("--x-max", type=float, default=1240.0, help="Maximum X coordinate.")
+    parser.add_argument("--y-min", type=float, default=10.0, help="Minimum Y coordinate.")
+    parser.add_argument("--y-max", type=float, default=1240.0, help="Maximum Y coordinate.")
+    parser.add_argument("--port", type=str, default="/dev/ttyUSB0", help="Serial port for ACRO.")
+    args = parser.parse_args()
+
+    if args.x_max <= args.x_min or args.y_max <= args.y_min:
+        raise ValueError("x-max must be greater than x-min and y-max greater than y-min.")
+
+    ACRO = ACRO(COMport=args.port)
     ACRO.home_ACRO()
 
     # x = [10,1250] # np.arange(0, 1250, 300/5) + 10  # np.arange(25, 1200, 300/100) + 25
@@ -123,15 +136,15 @@ if __name__ == "__main__":
     # ]  # flip the coordinates of x every other y to create a zig zag
     # xx, yy = xx.ravel(), yy.ravel()
 
-    ACRO.move_ACRO(650, 650, wait_idle=True)
+    center_x = (args.x_min + args.x_max) / 2
+    center_y = (args.y_min + args.y_max) / 2
+
+    ACRO.move_ACRO(center_x, center_y, wait_idle=True)
     # wait_till_go_from_server()
     # time.sleep(80) # be sure that calibration is done
     wait_till_pressed()
 
     # Simple sweep that increases density every other pass and alternates row/column snakes.
-    margin = 10
-    width = 1250
-    height = 1250
     spacing = 120.0  # start coarse
     min_spacing = 20.0
     decay = 0.75  # smaller every 2nd sweep
@@ -147,12 +160,12 @@ if __name__ == "__main__":
         x_offset = (spacing / 2) if sweep % 2 == 0 else 0
         y_offset = (spacing / 2) if sweep % 3 == 0 else 0
 
-        x = np.arange(margin + x_offset, width - margin, spacing)
-        y = np.arange(margin + y_offset, height - margin, spacing)
+        x = np.arange(args.x_min + x_offset, args.x_max, spacing)
+        y = np.arange(args.y_min + y_offset, args.y_max, spacing)
 
         if len(x) == 0 or len(y) == 0:
-            x = np.arange(margin, width - margin, spacing)
-            y = np.arange(margin, height - margin, spacing)
+            x = np.arange(args.x_min, args.x_max, spacing)
+            y = np.arange(args.y_min, args.y_max, spacing)
 
         xx, yy = np.meshgrid(x, y)
         # Serpentine; flip direction each sweep
