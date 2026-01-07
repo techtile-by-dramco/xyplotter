@@ -1,6 +1,6 @@
 import argparse
+import math
 import numpy as np
-import serial
 import time
 import zmq
 
@@ -14,6 +14,10 @@ iq_socket.bind(f"tcp://*:{50001}")
 
 class ACRO:
     def __init__(self, COMport):
+        try:
+            import serial  # local import so plotting mode works without pyserial
+        except ImportError as exc:
+            raise ImportError("pyserial is required when not using --plot") from exc
         # Establish serial connection
         self.ser = serial.Serial(
             COMport, baudrate=115200, timeout=1
@@ -111,6 +115,127 @@ def wait_till_go_from_server():
     sync_socket.close()
 
 
+def generate_sweep_points(
+    sweeps: int,
+    x_min: float,
+    x_max: float,
+    y_min: float,
+    y_max: float,
+    start_spacing: float = 120.0,
+    decay: float = 0.75,
+    min_spacing: float = 20.0,
+) -> list[list[tuple[float, float]]]:
+    """Replicate the sweep path without driving hardware."""
+    all_sweeps: list[list[tuple[float, float]]] = []
+    spacing = start_spacing
+    center = ((x_min + x_max) / 2, (y_min + y_max) / 2)
+    for sweep in range(1, sweeps + 1):
+        if sweep > 1 and sweep % 2 == 1:
+            spacing = max(min_spacing, spacing * decay)
+
+        x_offset = (spacing / 2) if sweep % 2 == 0 else 0
+        y_offset = (spacing / 2) if sweep % 3 == 0 else 0
+
+        x_lines = np.arange(x_min + x_offset, x_max, spacing)
+        y_lines = np.arange(y_min + y_offset, y_max, spacing)
+
+        if len(x_lines) == 0 or len(y_lines) == 0:
+            x_lines = np.arange(x_min, x_max, spacing)
+            y_lines = np.arange(y_min, y_max, spacing)
+
+        pts: list[tuple[float, float]] = [center]
+        if sweep % 2 == 0:
+            for idx, x_val in enumerate(x_lines):
+                if idx % 2 == 0:
+                    pts.append((x_val, y_min))
+                    pts.append((x_val, y_max))
+                else:
+                    pts.append((x_val, y_max))
+                    pts.append((x_val, y_min))
+        else:
+            for idx, y_val in enumerate(y_lines):
+                if idx % 2 == 0:
+                    pts.append((x_min, y_val))
+                    pts.append((x_max, y_val))
+                else:
+                    pts.append((x_max, y_val))
+                    pts.append((x_min, y_val))
+
+        all_sweeps.append(pts)
+    return all_sweeps
+
+
+def plot_sweeps(
+    sweeps: list[list[tuple[float, float]]],
+    x_min: float,
+    x_max: float,
+    y_min: float,
+    y_max: float,
+) -> None:
+    """Scatter and connect each sweep; include a combined view."""
+    import matplotlib.pyplot as plt
+
+    total_plots = len(sweeps) + 1
+    cols = 5
+    rows = math.ceil(total_plots / cols)
+    fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
+    axes = axes.flatten()
+
+    def draw_envelope(ax):
+        ax.plot(
+            [x_min, x_max, x_max, x_min, x_min],
+            [y_min, y_min, y_max, y_max, y_min],
+            color="gray",
+            linestyle="--",
+            linewidth=1,
+        )
+
+    for idx, (ax, pts) in enumerate(zip(axes, sweeps), start=1):
+        ax.set_title(f"Sweep {idx}")
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+        draw_envelope(ax)
+        if len(pts) > 1:
+            xs, ys = zip(*pts)
+            ax.plot(xs, ys, linewidth=1.0, color="tab:blue", alpha=0.6)
+            ax.scatter(xs, ys, c="tab:blue", s=8, alpha=0.7, zorder=3)
+            ax.scatter(xs[0], ys[0], c="red", s=16, zorder=4, label="start")
+            ax.scatter(xs[-1], ys[-1], c="black", s=14, zorder=4, label="end")
+        ax.legend(loc="upper right", fontsize="x-small", framealpha=0.7)
+
+    combined_ax_index = len(sweeps)
+    if combined_ax_index < len(axes):
+        ax = axes[combined_ax_index]
+        ax.set_title("All sweeps")
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+        draw_envelope(ax)
+        for idx, pts in enumerate(sweeps):
+            if len(pts) < 2:
+                continue
+            xs, ys = zip(*pts)
+            color = plt.cm.plasma(idx / max(len(sweeps) - 1, 1))
+            ax.plot(xs, ys, linewidth=1.0, color=color, alpha=0.8, label=f"Sweep {idx+1}")
+            ax.scatter(xs, ys, c=[color], s=6, alpha=0.6)
+        if len(sweeps) > 0 and len(sweeps[0]) > 0:
+            ax.scatter(
+                sweeps[0][0][0],
+                sweeps[0][0][1],
+                c="red",
+                s=18,
+                zorder=3,
+                label="start (sweep 1)",
+            )
+        ax.legend(loc="upper right", fontsize="x-small", framealpha=0.7)
+
+    for ax in axes[total_plots:]:
+        ax.axis("off")
+
+    plt.tight_layout()
+    plt.show()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Simple XY sweep with increasing density.")
@@ -120,10 +245,23 @@ if __name__ == "__main__":
     parser.add_argument("--y-max", type=float, default=1240.0, help="Maximum Y coordinate.")
     parser.add_argument("--port", type=str, default="/dev/ttyUSB0", help="Serial port for ACRO.")
     parser.add_argument("--speed", type=int, default=50, help="Motion speed (mm/min, sets G-code F).")
+    parser.add_argument("--plot", action="store_true", help="Plot the path instead of driving hardware.")
+    parser.add_argument("--sweeps", type=int, default=10, help="Number of sweeps to plot (if --plot).")
     args = parser.parse_args()
 
     if args.x_max <= args.x_min or args.y_max <= args.y_min:
         raise ValueError("x-max must be greater than x-min and y-max greater than y-min.")
+
+    if args.plot:
+        sweeps = generate_sweep_points(
+            sweeps=args.sweeps,
+            x_min=args.x_min,
+            x_max=args.x_max,
+            y_min=args.y_min,
+            y_max=args.y_max,
+        )
+        plot_sweeps(sweeps, x_min=args.x_min, x_max=args.x_max, y_min=args.y_min, y_max=args.y_max)
+        raise SystemExit(0)
 
     ACRO = ACRO(COMport=args.port)
     ACRO.home_ACRO()
@@ -161,25 +299,41 @@ if __name__ == "__main__":
         x_offset = (spacing / 2) if sweep % 2 == 0 else 0
         y_offset = (spacing / 2) if sweep % 3 == 0 else 0
 
-        x = np.arange(args.x_min + x_offset, args.x_max, spacing)
-        y = np.arange(args.y_min + y_offset, args.y_max, spacing)
+        # Generate line positions; we only travel between min and max per line.
+        x_lines = np.arange(args.x_min + x_offset, args.x_max, spacing)
+        y_lines = np.arange(args.y_min + y_offset, args.y_max, spacing)
 
-        if len(x) == 0 or len(y) == 0:
-            x = np.arange(args.x_min, args.x_max, spacing)
-            y = np.arange(args.y_min, args.y_max, spacing)
+        if len(x_lines) == 0 or len(y_lines) == 0:
+            x_lines = np.arange(args.x_min, args.x_max, spacing)
+            y_lines = np.arange(args.y_min, args.y_max, spacing)
 
-        xx, yy = np.meshgrid(x, y)
-        # Serpentine; flip direction each sweep
-        xx[1::2] = xx[1::2, ::-1]
-        if sweep % 2 == 0:
-            # Swap x and y to traverse columns instead of rows
-            xx, yy = yy, xx
-
-        xx, yy = xx.ravel(), yy.ravel()
         ACRO.move_ACRO(center_x, center_y, wait_idle=True, speed=args.speed)
-        for x, y in zip(xx, yy):
-            ACRO.move_ACRO(x, y, wait_idle=True, speed=args.speed)
-            time.sleep(0.1)
+
+        if sweep % 2 == 0:
+            # Column sweep: move along Y for each X
+            for idx, x_val in enumerate(x_lines):
+                if idx % 2 == 0:
+                    # bottom -> top
+                    ACRO.move_ACRO(x_val, args.y_min, wait_idle=False, speed=args.speed)
+                    ACRO.move_ACRO(x_val, args.y_max, wait_idle=False, speed=args.speed)
+                else:
+                    # top -> bottom
+                    ACRO.move_ACRO(x_val, args.y_max, wait_idle=False, speed=args.speed)
+                    ACRO.move_ACRO(x_val, args.y_min, wait_idle=False, speed=args.speed)
+        else:
+            # Row sweep: move along X for each Y
+            for idx, y_val in enumerate(y_lines):
+                if idx % 2 == 0:
+                    # left -> right
+                    ACRO.move_ACRO(args.x_min, y_val, wait_idle=False, speed=args.speed)
+                    ACRO.move_ACRO(args.x_max, y_val, wait_idle=False, speed=args.speed)
+                else:
+                    # right -> left
+                    ACRO.move_ACRO(args.x_max, y_val, wait_idle=False, speed=args.speed)
+                    ACRO.move_ACRO(args.x_min, y_val, wait_idle=False, speed=args.speed)
+
+        # Ensure the controller finishes the sweep before the next one
+        ACRO.wait_till_idle()
     # Return to origin
     ACRO.move_ACRO_to_origin()
 
