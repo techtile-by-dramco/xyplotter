@@ -311,13 +311,13 @@ if __name__ == "__main__":
     if args.plot:
         sweeps = generate_sweep_points(
             sweeps=args.sweeps,
-            x_min=args.x_min,
-            x_max=args.x_max,
-            y_min=args.y_min,
-            y_max=args.y_max,
+            x_min=x_min,
+            x_max=x_max,
+            y_min=y_min,
+            y_max=y_max,
             start_sweep=args.start_sweep,
         )
-        plot_sweeps(sweeps, x_min=args.x_min, x_max=args.x_max, y_min=args.y_min, y_max=args.y_max)
+        plot_sweeps(sweeps, x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max)
         raise SystemExit(0)
 
     ACRO = ACRO(COMport=args.port)
@@ -332,8 +332,8 @@ if __name__ == "__main__":
     # ]  # flip the coordinates of x every other y to create a zig zag
     # xx, yy = xx.ravel(), yy.ravel()
 
-    center_x = (args.x_min + args.x_max) / 2
-    center_y = (args.y_min + args.y_max) / 2
+    center_x = (x_min + x_max) / 2
+    center_y = (y_min + y_max) / 2
 
     if not args.skip_waiting:
         ACRO.move_ACRO(center_x, center_y, wait_idle=True, speed=args.speed)
@@ -358,19 +358,19 @@ if __name__ == "__main__":
         y_offset = (spacing / 2) if sweep % 3 == 0 else 0
 
         # Generate line positions; we only travel between min and max per line.
-        x_lines = np.arange(args.x_min + x_offset, args.x_max, spacing)
-        y_lines = np.arange(args.y_min + y_offset, args.y_max, spacing)
+        x_lines = np.arange(x_min + x_offset, x_max, spacing)
+        y_lines = np.arange(y_min + y_offset, y_max, spacing)
 
         if len(x_lines) == 0 or len(y_lines) == 0:
-            x_lines = np.arange(args.x_min, args.x_max, spacing)
-            y_lines = np.arange(args.y_min, args.y_max, spacing)
+            x_lines = np.arange(x_min, x_max, spacing)
+            y_lines = np.arange(y_min, y_max, spacing)
 
         mode = "column" if sweep % 2 == 0 else "row"
         print(
             f"{_c('[sweep]', '95')} {sweep} "
             f"{_c('mode', '94')}={mode} "
-            f"{_c('x', '92')}[{args.x_min + x_offset:.1f}->{args.x_max:.1f}] "
-            f"{_c('y', '92')}[{args.y_min + y_offset:.1f}->{args.y_max:.1f}] "
+            f"{_c('x', '92')}[{x_min + x_offset:.1f}->{x_max:.1f}] "
+            f"{_c('y', '92')}[{y_min + y_offset:.1f}->{y_max:.1f}] "
             f"{_c('spacing', '93')}={spacing:.2f} "
             f"{_c('speed', '96')}={args.speed} mm/min"
         )
@@ -383,23 +383,23 @@ if __name__ == "__main__":
             for idx, x_val in enumerate(x_lines):
                 if idx % 2 == 0:
                     # bottom -> top
-                    ACRO.move_ACRO(x_val, args.y_min, wait_idle=False, speed=args.speed)
-                    ACRO.move_ACRO(x_val, args.y_max, wait_idle=False, speed=args.speed)
+                    ACRO.move_ACRO(x_val, y_min, wait_idle=False, speed=args.speed)
+                    ACRO.move_ACRO(x_val, y_max, wait_idle=False, speed=args.speed)
                 else:
                     # top -> bottom
-                    ACRO.move_ACRO(x_val, args.y_max, wait_idle=False, speed=args.speed)
-                    ACRO.move_ACRO(x_val, args.y_min, wait_idle=False, speed=args.speed)
+                    ACRO.move_ACRO(x_val, y_max, wait_idle=False, speed=args.speed)
+                    ACRO.move_ACRO(x_val, y_min, wait_idle=False, speed=args.speed)
         else:
             # Row sweep: move along X for each Y
             for idx, y_val in enumerate(y_lines):
                 if idx % 2 == 0:
                     # left -> right
-                    ACRO.move_ACRO(args.x_min, y_val, wait_idle=False, speed=args.speed)
-                    ACRO.move_ACRO(args.x_max, y_val, wait_idle=False, speed=args.speed)
+                    ACRO.move_ACRO(x_min, y_val, wait_idle=False, speed=args.speed)
+                    ACRO.move_ACRO(x_max, y_val, wait_idle=False, speed=args.speed)
                 else:
                     # right -> left
-                    ACRO.move_ACRO(args.x_max, y_val, wait_idle=False, speed=args.speed)
-                    ACRO.move_ACRO(args.x_min, y_val, wait_idle=False, speed=args.speed)
+                    ACRO.move_ACRO(x_max, y_val, wait_idle=False, speed=args.speed)
+                    ACRO.move_ACRO(x_min, y_val, wait_idle=False, speed=args.speed)
 
         # Ensure the controller finishes the sweep before the next one
         ACRO.wait_till_idle()
