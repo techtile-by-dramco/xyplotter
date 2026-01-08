@@ -265,10 +265,12 @@ def plot_sweeps(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Simple XY sweep with increasing density.")
-    parser.add_argument("--x-min", type=float, default=10.0, help="Minimum X coordinate.")
-    parser.add_argument("--x-max", type=float, default=1240.0, help="Maximum X coordinate.")
-    parser.add_argument("--y-min", type=float, default=10.0, help="Minimum Y coordinate.")
-    parser.add_argument("--y-max", type=float, default=1240.0, help="Maximum Y coordinate.")
+    parser.add_argument("--min", dest="min_xy", type=float, default=None, help="Set both x-min and y-min.")
+    parser.add_argument("--max", dest="max_xy", type=float, default=None, help="Set both x-max and y-max.")
+    parser.add_argument("--x-min", type=float, default=None, help="Minimum X coordinate (overrides --min).")
+    parser.add_argument("--x-max", type=float, default=None, help="Maximum X coordinate (overrides --max).")
+    parser.add_argument("--y-min", type=float, default=None, help="Minimum Y coordinate (overrides --min).")
+    parser.add_argument("--y-max", type=float, default=None, help="Maximum Y coordinate (overrides --max).")
     parser.add_argument("--port", type=str, default="/dev/ttyUSB0", help="Serial port for ACRO.")
     parser.add_argument("--speed", type=int, default=50, help="Motion speed (mm/min, sets G-code F).")
     parser.add_argument("--plot", action="store_true", help="Plot the path instead of driving hardware.")
@@ -277,17 +279,26 @@ if __name__ == "__main__":
     parser.add_argument("--skip-waiting", action="store_true", help="Do not move to center before sweeping.")
     args = parser.parse_args()
 
-    if args.x_max <= args.x_min or args.y_max <= args.y_min:
+    default_min, default_max = 10.0, 1240.0
+    base_min = args.min_xy if args.min_xy is not None else default_min
+    base_max = args.max_xy if args.max_xy is not None else default_max
+
+    x_min = args.x_min if args.x_min is not None else base_min
+    x_max = args.x_max if args.x_max is not None else base_max
+    y_min = args.y_min if args.y_min is not None else base_min
+    y_max = args.y_max if args.y_max is not None else base_max
+
+    if x_max <= x_min or y_max <= y_min:
         raise ValueError("x-max must be greater than x-min and y-max greater than y-min.")
     if args.start_sweep < 1:
         raise ValueError("start-sweep must be >= 1.")
 
     print(_c("Run config:", "96"))
     for key, val in [
-        ("x_min", args.x_min),
-        ("x_max", args.x_max),
-        ("y_min", args.y_min),
-        ("y_max", args.y_max),
+        ("x_min", x_min),
+        ("x_max", x_max),
+        ("y_min", y_min),
+        ("y_max", y_max),
         ("port", args.port),
         ("speed", f"{args.speed} mm/min"),
         ("plot", args.plot),

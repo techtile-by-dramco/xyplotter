@@ -85,7 +85,12 @@ class XYPlotter:
             command = f"{command}\n"
         self.ser.write(command.encode())
 
-    def wait_till_idle(self, poll_interval: float = 0.1, verbose: bool = False) -> None:
+    def wait_till_idle(
+        self,
+        poll_interval: float = 0.1,
+        verbose: bool = False,
+        show_position: bool = True,
+    ) -> None:
         """Poll GRBL status until the controller reports Idle."""
         while True:
             time.sleep(poll_interval)
@@ -94,7 +99,13 @@ class XYPlotter:
             response = self.ser.readline().decode(errors="ignore").strip()
             if verbose and response:
                 print(response)
+            if show_position and response:
+                status_line = _format_status_position(response)
+                if status_line:
+                    print(status_line, end="\r", flush=True)
             if "Idle" in response:
+                if show_position:
+                    print(" " * 80, end="\r", flush=True)
                 break
 
     def home(self) -> None:
@@ -141,6 +152,38 @@ class XYPlotter:
     def close(self) -> None:
         if self.ser and self.ser.is_open:
             self.ser.close()
+
+
+def _format_status_position(response: str) -> Optional[str]:
+    """Extract a concise status line with position from a GRBL status response."""
+    if not response.startswith("<") or not response.endswith(">"):
+        return None
+
+    fields = response[1:-1].split("|")
+    if not fields:
+        return None
+
+    state = fields[0].strip()
+    label = None
+    position = None
+    for field in fields[1:]:
+        if field.startswith("WPos:"):
+            label = "WPos"
+            position = field[5:]
+            break
+        if field.startswith("MPos:"):
+            label = "MPos"
+            position = field[5:]
+            break
+
+    if not position or not label:
+        return None
+
+    coords = [coord.strip() for coord in position.split(",") if coord.strip()]
+    formatted = ", ".join(coords[:3]) if coords else position.strip()
+    if state:
+        return f"{state} {label}: {formatted}"
+    return f"{label}: {formatted}"
 
 
 def wait_till_go_from_server(
