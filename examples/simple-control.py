@@ -34,12 +34,34 @@ class ACRO:
         )  # Replace with the appropriate serial port
 
         # Hard stop any prior motion and clear buffer
-        # self.reset_controller()
+        self.reset_controller()
 
         # Wake up grbl
         self.ser.write(b"\r\n\r\n")
         time.sleep(2)  # Wait for grbl to initialize
         self.ser.flushInput()  # Flush startup text in serial input
+        status = self.get_status()
+        if status:
+            color = "91" if "Alarm" in status else "92"
+            print(_c(f"[status after init] {status}", color))
+            if "Alarm" in status:
+                print(_c("Alarm detected after init; sending $X (unlock) and rechecking.", "91"))
+                try:
+                    self.ser.write(b"$X\n")
+                    time.sleep(0.2)
+                    follow = self.get_status()
+                    if follow:
+                        color = "91" if "Alarm" in follow else "92"
+                        print(_c(f"[status after unlock] {follow}", color))
+                    if "Alarm" in (follow or ""):
+                        print(
+                            _c(
+                                "Still in Alarm. Check limit switches (Pn flag), clear the switch, then rerun.",
+                                "91",
+                            )
+                        )
+                except Exception:
+                    pass
 
     def wait_till_idle(self):
         response = ""
@@ -49,7 +71,11 @@ class ACRO:
             self.ser.flushInput()
             self.ser.write(b"?\n")
             response = self.ser.readline().decode().strip()
-            # print(response)
+            if response:
+                if "Alarm" in response:
+                    print(_c(f"[alarm] {response}", "91"))
+                else:
+                    print(_c(f"[status] {response}", "94"))
 
             if "Idle" in response:
                 break
@@ -102,6 +128,11 @@ class ACRO:
             self.ser.flushInput()
         except Exception:
             pass
+
+    def get_status(self) -> str:
+        """Send ? and return one status line (or empty string)."""
+        self.ser.write(b"?\n")
+        return self.ser.readline().decode(errors="ignore").strip()
 
 
 def wait_till_pressed():
