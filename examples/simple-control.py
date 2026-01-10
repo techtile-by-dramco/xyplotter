@@ -33,6 +33,9 @@ class ACRO:
             COMport, baudrate=115200, timeout=1
         )  # Replace with the appropriate serial port
 
+        # Hard stop any prior motion and clear buffer
+        self.reset_controller()
+
         # Wake up grbl
         self.ser.write(b"\r\n\r\n")
         time.sleep(2)  # Wait for grbl to initialize
@@ -90,6 +93,15 @@ class ACRO:
 
     def close_ACRO(self):
         self.ser.close()
+
+    def reset_controller(self):
+        """Send GRBL soft reset to halt any prior buffered motion."""
+        try:
+            self.ser.write(b"\x18")  # Ctrl+X
+            time.sleep(0.5)
+            self.ser.flushInput()
+        except Exception:
+            pass
 
 
 def wait_till_pressed():
