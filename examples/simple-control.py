@@ -8,9 +8,9 @@ import zmq
 
 context = zmq.Context()
 
-iq_socket = context.socket(zmq.PUB)
+# iq_socket = context.socket(zmq.PUB)
 
-iq_socket.bind(f"tcp://*:{50001}")
+# iq_socket.bind(f"tcp://*:{50001}")
 
 # Simple ANSI coloring for logs
 USE_COLOR = sys.stdout.isatty()
