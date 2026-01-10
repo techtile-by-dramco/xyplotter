@@ -343,7 +343,7 @@ if __name__ == "__main__":
 
     # Simple sweep that increases density every other pass and alternates row/column snakes.
     spacing = compute_spacing_for_sweep(120.0, 20.0, 0.75, args.start_sweep)
-    min_spacing = 20.0
+    min_spacing = 2.0
     decay = 0.75
     sweep = args.start_sweep
 
