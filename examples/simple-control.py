@@ -34,7 +34,7 @@ class ACRO:
         )  # Replace with the appropriate serial port
 
         # Hard stop any prior motion and clear buffer
-        self.reset_controller()
+        # self.reset_controller()
 
         # Wake up grbl
         self.ser.write(b"\r\n\r\n")
