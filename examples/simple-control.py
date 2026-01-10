@@ -355,67 +355,80 @@ if __name__ == "__main__":
 
     # Simple sweep that increases density every other pass and alternates row/column snakes.
     spacing = compute_spacing_for_sweep(120.0, 20.0, 0.75, args.start_sweep)
-    min_spacing = 2.0
+    min_spacing = 20.0
     decay = 0.75
     sweep = args.start_sweep
 
-    while True:
-        sweep += 1
-        # Adjust spacing after every 2nd sweep
-        if sweep > 1 and sweep % 2 == 1 and sweep != args.start_sweep:
-            spacing = max(min_spacing, spacing * decay)
+    try:
+        while True:
+            sweep += 1
+            # Adjust spacing after every 2nd sweep
+            if sweep > 1 and sweep % 2 == 1 and sweep != args.start_sweep:
+                spacing = max(min_spacing, spacing * decay)
 
-        # Offset to avoid retracing the same paths
-        x_offset = (spacing / 2) if sweep % 2 == 0 else 0
-        y_offset = (spacing / 2) if sweep % 3 == 0 else 0
+            # Offset to avoid retracing the same paths
+            x_offset = (spacing / 2) if sweep % 2 == 0 else 0
+            y_offset = (spacing / 2) if sweep % 3 == 0 else 0
 
-        # Generate line positions; we only travel between min and max per line.
-        x_lines = np.arange(x_min + x_offset, x_max, spacing)
-        y_lines = np.arange(y_min + y_offset, y_max, spacing)
+            # Generate line positions; we only travel between min and max per line.
+            x_lines = np.arange(x_min + x_offset, x_max, spacing)
+            y_lines = np.arange(y_min + y_offset, y_max, spacing)
 
-        if len(x_lines) == 0 or len(y_lines) == 0:
-            x_lines = np.arange(x_min, x_max, spacing)
-            y_lines = np.arange(y_min, y_max, spacing)
+            if len(x_lines) == 0 or len(y_lines) == 0:
+                x_lines = np.arange(x_min, x_max, spacing)
+                y_lines = np.arange(y_min, y_max, spacing)
 
-        mode = "column" if sweep % 2 == 0 else "row"
-        print(
-            f"{_c('[sweep]', '95')} {sweep} "
-            f"{_c('mode', '94')}={mode} "
-            f"{_c('x', '92')}[{x_min + x_offset:.1f}->{x_max:.1f}] "
-            f"{_c('y', '92')}[{y_min + y_offset:.1f}->{y_max:.1f}] "
-            f"{_c('spacing', '93')}={spacing:.2f} "
-            f"{_c('speed', '96')}={args.speed} mm/min"
-        )
+            mode = "column" if sweep % 2 == 0 else "row"
+            print(
+                f"{_c('[sweep]', '95')} {sweep} "
+                f"{_c('mode', '94')}={mode} "
+                f"{_c('x', '92')}[{x_min + x_offset:.1f}->{x_max:.1f}] "
+                f"{_c('y', '92')}[{y_min + y_offset:.1f}->{y_max:.1f}] "
+                f"{_c('spacing', '93')}={spacing:.2f} "
+                f"{_c('speed', '96')}={args.speed} mm/min"
+            )
 
-        if not args.skip_waiting:
-            ACRO.move_ACRO(center_x, center_y, wait_idle=True, speed=args.speed)
+            if not args.skip_waiting:
+                ACRO.move_ACRO(center_x, center_y, wait_idle=True, speed=args.speed)
 
-        if sweep % 2 == 0:
-            # Column sweep: move along Y for each X
-            for idx, x_val in enumerate(x_lines):
-                if idx % 2 == 0:
-                    # bottom -> top
-                    ACRO.move_ACRO(x_val, y_min, wait_idle=False, speed=args.speed)
-                    ACRO.move_ACRO(x_val, y_max, wait_idle=False, speed=args.speed)
-                else:
-                    # top -> bottom
-                    ACRO.move_ACRO(x_val, y_max, wait_idle=False, speed=args.speed)
-                    ACRO.move_ACRO(x_val, y_min, wait_idle=False, speed=args.speed)
-        else:
-            # Row sweep: move along X for each Y
-            for idx, y_val in enumerate(y_lines):
-                if idx % 2 == 0:
-                    # left -> right
-                    ACRO.move_ACRO(x_min, y_val, wait_idle=False, speed=args.speed)
-                    ACRO.move_ACRO(x_max, y_val, wait_idle=False, speed=args.speed)
-                else:
-                    # right -> left
-                    ACRO.move_ACRO(x_max, y_val, wait_idle=False, speed=args.speed)
-                    ACRO.move_ACRO(x_min, y_val, wait_idle=False, speed=args.speed)
+            if sweep % 2 == 0:
+                # Column sweep: move along Y for each X
+                for idx, x_val in enumerate(x_lines):
+                    if idx % 2 == 0:
+                        # bottom -> top
+                        ACRO.move_ACRO(x_val, y_min, wait_idle=False, speed=args.speed)
+                        ACRO.move_ACRO(x_val, y_max, wait_idle=False, speed=args.speed)
+                    else:
+                        # top -> bottom
+                        ACRO.move_ACRO(x_val, y_max, wait_idle=False, speed=args.speed)
+                        ACRO.move_ACRO(x_val, y_min, wait_idle=False, speed=args.speed)
+            else:
+                # Row sweep: move along X for each Y
+                for idx, y_val in enumerate(y_lines):
+                    if idx % 2 == 0:
+                        # left -> right
+                        ACRO.move_ACRO(x_min, y_val, wait_idle=False, speed=args.speed)
+                        ACRO.move_ACRO(x_max, y_val, wait_idle=False, speed=args.speed)
+                    else:
+                        # right -> left
+                        ACRO.move_ACRO(x_max, y_val, wait_idle=False, speed=args.speed)
+                        ACRO.move_ACRO(x_min, y_val, wait_idle=False, speed=args.speed)
 
-        # Ensure the controller finishes the sweep before the next one
+            # Ensure the controller finishes the sweep before the next one
+            ACRO.wait_till_idle()
+    except KeyboardInterrupt:
+        print(_c("Interrupted; sending controller reset.", "91"))
+        ACRO.reset_controller()
         ACRO.wait_till_idle()
-    # Return to origin
-    ACRO.move_ACRO_to_origin()
+    finally:
+        try:
+            if not args.skip_waiting:
+                ACRO.move_ACRO_to_origin()
+        except Exception:
+            pass
+        try:
+            ACRO.close_ACRO()
+        except Exception:
+            pass
 
     print("Done")
